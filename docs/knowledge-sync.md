@@ -18,7 +18,7 @@ flowchart LR
   documents are removed from it. The agent is then published.
 - **Manual run** (Actions > Knowledge sync > Run workflow): tick *full sync* to re-upload every document.
 
-The workflow skips the sync step, without failing, as long as the secrets below are not configured.
+The workflow skips the sync step, without failing, as long as the settings below are not configured.
 
 ## How the sync works
 
@@ -57,17 +57,24 @@ No API permission is needed: access to Dataverse is granted in the next step.
    For a demo environment: **System Administrator**. In production: a custom role limited to read and write on
    the **Copilot** (`bot`) and **Copilot component** (`botcomponent`) tables.
 
-### 3. Repository secrets
+### 3. Repository variables and secrets
 
-GitHub repository > **Settings** > **Secrets and variables** > **Actions** > **New repository secret**:
+GitHub repository > **Settings** > **Secrets and variables** > **Actions**.
+
+**Variables** tab (not sensitive):
+
+| Variable | Value |
+|---|---|
+| `DATAVERSE_URL` | Environment URL, e.g. `https://orgxxxxxxxx.crm12.dynamics.com` (Power Platform admin center > environment > Environment URL) |
+| `COPILOT_AGENT_ID` | The GUID after `/bots/` in the agent's Copilot Studio URL |
+
+**Secrets** tab:
 
 | Secret | Value |
 |---|---|
-| `DATAVERSE_URL` | Environment URL, e.g. `https://orgxxxxxxxx.crm12.dynamics.com` (Power Platform admin center > environment > Environment URL) |
 | `AZURE_TENANT_ID` | Directory (tenant) ID |
 | `AZURE_CLIENT_ID` | Application (client) ID |
 | `AZURE_CLIENT_SECRET` | Client secret value |
-| `COPILOT_AGENT_ID` | The GUID after `/bots/` in the agent's Copilot Studio URL |
 
 ### 4. Check
 

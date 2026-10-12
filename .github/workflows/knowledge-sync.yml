@@ -52,24 +52,25 @@ jobs:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     env:
-      DATAVERSE_URL: ${{ secrets.DATAVERSE_URL }}
+      # Not sensitive: repository variables (secrets also accepted).
+      DATAVERSE_URL: ${{ vars.DATAVERSE_URL || secrets.DATAVERSE_URL }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-      COPILOT_AGENT_ID: ${{ secrets.COPILOT_AGENT_ID }}
+      COPILOT_AGENT_ID: ${{ vars.COPILOT_AGENT_ID || secrets.COPILOT_AGENT_ID }}
     steps:
       - name: Check configuration
-        if: env.DATAVERSE_URL == '' || env.COPILOT_AGENT_ID == ''
-        run: echo "::notice::Copilot Studio secrets are not configured, sync skipped (see docs/knowledge-sync.md)."
+        if: env.DATAVERSE_URL == '' || env.COPILOT_AGENT_ID == '' || env.AZURE_CLIENT_SECRET == ''
+        run: echo "::notice::Copilot Studio settings are not configured, sync skipped (see docs/knowledge-sync.md)."
 
       - uses: actions/checkout@v4
-        if: env.DATAVERSE_URL != '' && env.COPILOT_AGENT_ID != ''
+        if: env.DATAVERSE_URL != '' && env.COPILOT_AGENT_ID != '' && env.AZURE_CLIENT_SECRET != ''
         with:
           fetch-depth: 0
 
       - name: Find changed documents
         id: changes
-        if: env.DATAVERSE_URL != '' && env.COPILOT_AGENT_ID != ''
+        if: env.DATAVERSE_URL != '' && env.COPILOT_AGENT_ID != '' && env.AZURE_CLIENT_SECRET != ''
         env:
           BEFORE: ${{ github.event.before }}
           FULL: ${{ github.event_name == 'workflow_dispatch' && inputs.full_sync }}
