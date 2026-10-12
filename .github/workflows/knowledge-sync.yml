@@ -1,0 +1,108 @@
+name: Knowledge sync
+
+# Every change to the documents in data/ is evaluated, then pushed to the Copilot Studio agent.
+#   pull request -> retrieval evaluation only (quality gate)
+#   push to main -> evaluation, then add / replace / delete the changed files in the agent
+#   manual run   -> optionally re-sync every document
+
+on:
+  pull_request:
+    paths: ["data/*.md", "rag/**"]
+  push:
+    branches: [main]
+    paths: ["data/*.md", "rag/**", "scripts/sync_copilot_knowledge.py"]
+  workflow_dispatch:
+    inputs:
+      full_sync:
+        description: "Re-upload every document, not only the changed ones"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: knowledge-sync
+  cancel-in-progress: false
+
+jobs:
+  evaluate:
+    name: Retrieval evaluation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      # Offline TF-IDF retrieval: deterministic, free, no secret needed.
+      # Fails the run if a document change makes the right passages harder to find.
+      - name: Evaluate retrieval on the golden set
+        env:
+          RAG_RETRIEVER: tfidf
+        run: python rag/eval_retrieval.py --min-hit1 0.8 --min-hit3 0.9
+
+  sync:
+    name: Sync to Copilot Studio
+    needs: evaluate
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      DATAVERSE_URL: ${{ secrets.DATAVERSE_URL }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+      COPILOT_AGENT_ID: ${{ secrets.COPILOT_AGENT_ID }}
+    steps:
+      - name: Check configuration
+        if: env.DATAVERSE_URL == '' || env.COPILOT_AGENT_ID == ''
+        run: echo "::notice::Copilot Studio secrets are not configured, sync skipped (see docs/knowledge-sync.md)."
+
+      - uses: actions/checkout@v4
+        if: env.DATAVERSE_URL != '' && env.COPILOT_AGENT_ID != ''
+        with:
+          fetch-depth: 0
+
+      - name: Find changed documents
+        id: changes
+        if: env.DATAVERSE_URL != '' && env.COPILOT_AGENT_ID != ''
+        env:
+          BEFORE: ${{ github.event.before }}
+          FULL: ${{ github.event_name == 'workflow_dispatch' && inputs.full_sync }}
+        run: |
+          if [ "$FULL" = "true" ] || [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            ls data/*.md > upsert.txt
+            : > deleted.txt
+          else
+            git diff --no-renames --name-only --diff-filter=AM "$BEFORE" "$GITHUB_SHA" -- 'data/*.md' > upsert.txt
+            git diff --no-renames --name-only --diff-filter=D  "$BEFORE" "$GITHUB_SHA" -- 'data/*.md' > deleted.txt
+          fi
+          echo "To add or replace:"; cat upsert.txt
+          echo "To delete:"; cat deleted.txt
+          if [ -s upsert.txt ] || [ -s deleted.txt ]; then echo "any=true" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Convert Markdown to Word
+        if: steps.changes.outputs.any == 'true'
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq pandoc
+          mkdir -p build/knowledge
+          while read -r f; do
+            [ -n "$f" ] && pandoc "$f" -o "build/knowledge/$(basename "${f%.md}").docx"
+          done < upsert.txt
+          ls -la build/knowledge
+
+      - uses: actions/setup-python@v5
+        if: steps.changes.outputs.any == 'true'
+        with:
+          python-version: "3.12"
+
+      - name: Push to the agent and publish
+        if: steps.changes.outputs.any == 'true'
+        run: |
+          DELETE=$(while read -r f; do [ -n "$f" ] && basename "${f%.md}.docx"; done < deleted.txt)
+          FILES=$(ls build/knowledge/*.docx 2>/dev/null || true)
+          python scripts/sync_copilot_knowledge.py $FILES ${DELETE:+--delete $DELETE} --publish

@@ -9,6 +9,9 @@ One set of company documents, made answerable in three ways, from the fastest to
 3. **MCP server** (interoperability): exposes the RAG pipeline and an ops check as tools that any MCP
    client can call, including the Copilot Studio agent itself.
 
+A GitHub Actions workflow keeps the agent's knowledge up to date: every change to a document is evaluated,
+then pushed to the Copilot Studio agent.
+
 The documents are three internal policies of a fictional logistics company in Seoul, *Hanbit Logistics*:
 an incident runbook, a support and SLA policy, and a security and patch management policy.
 
@@ -21,6 +24,8 @@ flowchart LR
     M -- "Streamable HTTP<br/>through an HTTPS tunnel" --> CS
     M -- "stdio" --> IDE["Local MCP clients<br/>VS Code, IDE agents"]
     CS --> PA["Power Automate agent flow<br/>Open incident"]
+    G["GitHub Actions<br/>evaluate, then sync"] -- "Dataverse Web API" --> CS
+    D -.-> G
 ```
 
 ## Repository layout
@@ -29,11 +34,14 @@ flowchart LR
 data/                        the 3 source documents (Markdown), indexed by the RAG pipeline
 data/copilot-studio-upload/  the same documents as .docx, ready to upload to Copilot Studio
 docs/copilot-studio.md       Copilot Studio agent configuration and test results
+docs/knowledge-sync.md       knowledge CI/CD: how it works and one-time setup
 rag/rag_core.py              RAG pipeline: chunking, embeddings, search, cited generation
 rag/ask.py                   command-line question answering
 rag/eval_retrieval.py        retrieval evaluation on a 10-question golden set (Hit@1, Hit@3)
 mcp_server/server.py         MCP server exposing 3 tools
 mcp_server/test_client.py    MCP client that lists and calls every tool
+scripts/sync_copilot_knowledge.py   pushes knowledge files to the Copilot Studio agent (Dataverse Web API)
+.github/workflows/knowledge-sync.yml   evaluation gate + sync on every document change
 ```
 
 ## Quick start
@@ -172,6 +180,26 @@ MCP_API_KEY=<choose-a-key> python mcp_server/server.py --public-host <xxx>.trycl
 Then in Copilot Studio: agent > **Tools** > **Add a tool** > **New tool** > **Model Context Protocol**,
 URL `https://<xxx>.trycloudflare.com/mcp`, API key authentication with header `x-api-key`.
 Details in [`docs/copilot-studio.md`](docs/copilot-studio.md#4-tool-the-python-mcp-server).
+
+## 4. Knowledge CI/CD
+
+Documents are versioned in `data/` and treated like code by the
+[`Knowledge sync`](.github/workflows/knowledge-sync.yml) workflow:
+
+| Event | What runs |
+|---|---|
+| Pull request touching `data/` | Retrieval evaluation as a quality gate (Hit@1 ≥ 80%, Hit@3 ≥ 90%) |
+| Push to `main` | Evaluation, then changed documents converted to Word and pushed to the agent, deleted ones removed, agent published |
+| Manual run | Same, optionally re-uploading every document |
+
+The sync script writes to the Dataverse tables behind Copilot Studio, the same way the upload button does:
+it uploads the new version first, then deletes the old one, so the agent always has the document.
+Authentication uses an Entra ID app registration registered as an application user in the environment.
+
+The gate catches real mistakes: deleting the SLA policy while the golden set still asks about it drops
+retrieval to 5/10 and blocks the sync.
+
+Setup and details: [`docs/knowledge-sync.md`](docs/knowledge-sync.md).
 
 ## Notes
 
