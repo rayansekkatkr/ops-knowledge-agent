@@ -52,10 +52,11 @@ jobs:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     env:
-      # Not sensitive: repository variables (secrets also accepted).
+      # Identifiers are not sensitive: repository variables (secrets also accepted).
+      # Only the client secret must be a repository secret.
       DATAVERSE_URL: ${{ vars.DATAVERSE_URL || secrets.DATAVERSE_URL }}
-      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID || secrets.AZURE_TENANT_ID }}
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID || secrets.AZURE_CLIENT_ID }}
       AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
       COPILOT_AGENT_ID: ${{ vars.COPILOT_AGENT_ID || secrets.COPILOT_AGENT_ID }}
     steps:

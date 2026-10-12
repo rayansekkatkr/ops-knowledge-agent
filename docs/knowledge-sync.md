@@ -67,14 +67,14 @@ GitHub repository > **Settings** > **Secrets and variables** > **Actions**.
 |---|---|
 | `DATAVERSE_URL` | Environment URL, e.g. `https://orgxxxxxxxx.crm12.dynamics.com` (Power Platform admin center > environment > Environment URL) |
 | `COPILOT_AGENT_ID` | The GUID after `/bots/` in the agent's Copilot Studio URL |
+| `AZURE_TENANT_ID` | Directory (tenant) ID |
+| `AZURE_CLIENT_ID` | Application (client) ID, not the object ID |
 
-**Secrets** tab:
+**Secrets** tab, the only sensitive value:
 
 | Secret | Value |
 |---|---|
-| `AZURE_TENANT_ID` | Directory (tenant) ID |
-| `AZURE_CLIENT_ID` | Application (client) ID |
-| `AZURE_CLIENT_SECRET` | Client secret value |
+| `AZURE_CLIENT_SECRET` | Client secret **value** (not the secret ID) |
 
 ### 4. Check
 
